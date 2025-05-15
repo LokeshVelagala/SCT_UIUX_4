@@ -1,0 +1,459 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Advanced Low-Fidelity Prototype - Fitness App User Journey with Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f4;
+      overflow-x: hidden;
+    }
+    .screen {
+      display: none;
+      height: 100vh;
+      width: 100%;
+      max-width: 400px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: white;
+      position: relative;
+      transition: transform 0.3s ease-in-out;
+    }
+    .screen.active {
+      display: block;
+      transform: translateX(0);
+    }
+    .progress-container {
+      position: relative;
+      margin-bottom: 20px;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background-color: #ddd;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background-color: #4CAF50;
+      transition: width 0.3s ease;
+    }
+    .progress-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #666;
+      margin-top: 5px;
+    }
+    .carousel {
+      display: flex;
+      overflow-x: hidden;
+      width: 100%;
+      transition: transform 0.3s ease;
+    }
+    .carousel-item {
+      flex: 0 0 100%;
+      padding: 20px;
+      text-align: center;
+    }
+    .carousel-dots {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      background-color: #ddd;
+      border-radius: 50%;
+    }
+    .dot.active {
+      background-color: #4CAF50;
+    }
+    .loading-overlay {
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.3);
+      justify-content: center;
+      align-items: center;
+    }
+    .loading-overlay.active {
+      display: flex;
+    }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #4CAF50;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- Screen 1: Welcome -->
+  <div id="screen-1" class="screen active" role="region" aria-label="Welcome Screen">
+    <h1 class="text-3xl font-bold text-center mt-20 text-gray-800">Welcome to FitJourney</h1>
+    <p class="text-center text-gray-600 mt-4">Your path to a healthier you starts here!</p>
+    <button onclick="navigateTo('screen-2')" class="block mx-auto mt-10 bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600" aria-label="Get Started">Get Started</button>
+  </div>
+
+  <!-- Screen 2: Onboarding -->
+  <div id="screen-2" class="screen" role="region" aria-label="Onboarding Screen">
+    <div class="progress-container">
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: 20%"></div>
+      </div>
+      <div class="progress-labels">
+        <span>Welcome</span>
+        <span>Onboarding</span>
+        <span>Profile</span>
+        <span>Goals</span>
+        <span>Done</span>
+      </div>
+    </div>
+    <h2 class="text-2xl font-bold text-center text-gray-800">What FitJourney Offers</h2>
+    <div class="carousel" id="carousel">
+      <div class="carousel-item">
+        <h3 class="text-xl font-semibold text-gray-700">Track Your Goals</h3>
+        <p class="text-gray-600 mt-2">Set and monitor your fitness goals with ease.</p>
+      </div>
+      <div class="carousel-item">
+        <h3 class="text-xl font-semibold text-gray-700">Personalized Workouts</h3>
+        <p class="text-gray-600 mt-2">Get workout plans tailored to your needs.</p>
+      </div>
+      <div class="carousel-item">
+        <h3 class="text-xl font-semibold text-gray-700">Join a Community</h3>
+        <p class="text-gray-600 mt-2">Connect with others on the same journey.</p>
+      </div>
+    </div>
+    <div class="carousel-dots" id="carousel-dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+    <div class="flex justify-between mt-6">
+      <button onclick="navigateTo('screen-3')" class="text-gray-500 hover:underline" aria-label="Skip Onboarding">Skip</button>
+      <button onclick="nextCarouselSlide()" class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600" aria-label="Next Slide">Next</button>
+    </div>
+  </div>
+
+  <!-- Screen 3: Profile Setup -->
+  <div id="screen-3" class="screen" role="region" aria-label="Profile Setup Screen">
+    <div class="progress-container">
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: 40%"></div>
+      </div>
+      <div class="progress-labels">
+        <span>Welcome</span>
+        <span>Onboarding</span>
+        <span>Profile</span>
+        <span>Goals</span>
+        <span>Done</span>
+      </div>
+    </div>
+    <h2 class="text-2xl font-bold text-center text-gray-800">Set Up Your Profile</h2>
+    <form id="profile-form" class="mt-6 space-y-4">
+      <div>
+        <label class="block text-gray-700">Name</label>
+        <input type="text" id="name" placeholder="Enter your name" class="w-full p-2 border rounded-lg" required aria-required="true" />
+        <p id="name-error" class="text-red-500 text-sm hidden">Name is required</p>
+      </div>
+      <div>
+        <label class="block text-gray-700">Age</label>
+        <input type="number" id="age" placeholder="Enter your age" class="w-full p-2 border rounded-lg" required aria-required="true" />
+        <p id="age-error" class="text-red-500 text-sm hidden">Age must be between 18 and 100</p>
+      </div>
+      <div>
+        <label class="block text-gray-700">Fitness Level</label>
+        <select id="fitness-level" class="w-full p-2 border rounded-lg" required aria-required="true">
+          <option value="">Select</option>
+          <option value="Beginner">Beginner</option>
+          <option value="Intermediate">Intermediate</option>
+          <option value="Advanced">Advanced</option>
+        </select>
+        <p id="fitness-error" class="text-red-500 text-sm hidden">Please select a fitness level</p>
+      </div>
+      <button type="button" onclick="validateAndProceed()" class="block w-full bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600" aria-label="Continue to Goals">Continue</button>
+    </form>
+  </div>
+
+  <!-- Screen 4: Fitness Goals -->
+  <div id="screen-4" class="screen" role="region" aria-label="Fitness Goals Screen">
+    <div class="progress-container">
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: 60%"></div>
+      </div>
+      <div class="progress-labels">
+        <span>Welcome</span>
+        <span>Onboarding</span>
+        <span>Profile</span>
+        <span>Goals</span>
+        <span>Done</span>
+      </div>
+    </div>
+    <h2 class="text-2xl font-bold text-center text-gray-800">Select Your Fitness Goals</h2>
+    <div class="mt-6 space-y-4">
+      <button onclick="selectGoal('Weight Loss')" class="w-full p-4 border rounded-lg hover:bg-gray-100 flex items-center" aria-label="Select Weight Loss Goal">
+        <span class="text-2xl mr-4">🏋️</span> Weight Loss
+      </button>
+      <button onclick="selectGoal('Muscle Gain')" class="w-full p-4 border rounded-lg hover:bg-gray-100 flex items-center" aria-label="Select Muscle Gain Goal">
+        <span class="text-2xl mr-4">💪</span> Muscle Gain
+      </button>
+      <button onclick="selectGoal('General Fitness')" class="w-full p-4 border rounded-lg hover:bg-gray-100 flex items-center" aria-label="Select General Fitness Goal">
+        <span class="text-2xl mr-4">🏃</span> General Fitness
+      </button>
+    </div>
+    <button onclick="navigateTo('screen-5')" class="block w-full mt-6 bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600" aria-label="Continue to Confirmation">Continue</button>
+  </div>
+
+  <!-- Screen 5: Confirmation -->
+  <div id="screen-5" class="screen" role="region" aria-label="Confirmation Screen">
+    <div class="progress-container">
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: 80%"></div>
+      </div>
+      <div class="progress-labels">
+        <span>Welcome</span>
+        <span>Onboarding</span>
+        <span>Profile</span>
+        <span>Goals</span>
+        <span>Done</span>
+      </div>
+    </div>
+    <h2 class="text-2xl font-bold text-center text-gray-800">You’re All Set!</h2>
+    <p class="text-center text-gray-600 mt-4">Here’s a summary of your setup:</p>
+    <div class="mt-6 p-4 border rounded-lg">
+      <p><strong>Name:</strong> <span id="summary-name">[User Input]</span></p>
+      <p><strong>Age:</strong> <span id="summary-age">[User Input]</span></p>
+      <p><strong>Fitness Level:</strong> <span id="summary-fitness">[User Input]</span></p>
+      <p><strong>Goal:</strong> <span id="summary-goal">[Goal]</span></p>
+    </div>
+    <button onclick="navigateTo('screen-6')" class="block w-full mt-6 bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600" aria-label="Go to Dashboard">Go to Dashboard</button>
+  </div>
+
+  <!-- Screen 6: Dashboard -->
+  <div id="screen-6" class="screen" role="region" aria-label="Dashboard Screen">
+    <div class="progress-container">
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: 100%"></div>
+      </div>
+      <div class="progress-labels">
+        <span>Welcome</span>
+        <span>Onboarding</span>
+        <span>Profile</span>
+        <span>Goals</span>
+        <span>Done</span>
+      </div>
+    </div>
+    <h2 class="text-2xl font-bold text-center text-gray-800">Your Dashboard</h2>
+    <div class="mt-6 space-y-4">
+      <!-- User Summary -->
+      <div class="p-4 border rounded-lg">
+        <h3 class="text-lg font-semibold text-gray-700">Welcome, <span id="dashboard-name">[Name]</span>!</h3>
+        <p><strong>Age:</strong> <span id="dashboard-age">[Age]</span></p>
+        <p><strong>Fitness Level:</strong> <span id="dashboard-fitness">[Fitness Level]</span></p>
+        <p><strong>Goal:</strong> <span id="dashboard-goal">[Goal]</span></p>
+      </div>
+      <!-- Activity Tracking -->
+      <div class="p-4 border rounded-lg">
+        <h3 class="text-lg font-semibold text-gray-700">Today’s Activity</h3>
+        <p class="text-gray-600">[Steps: Placeholder]</p>
+        <p class="text-gray-600">[Calories Burned: Placeholder]</p>
+      </div>
+      <!-- Workout Plans -->
+      <div class="p-4 border rounded-lg">
+        <h3 class="text-lg font-semibold text-gray-700">Workout Plan</h3>
+        <p class="text-gray-600">[Today’s Workout: Placeholder]</p>
+        <button class="mt-2 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600" aria-label="Start Workout">Start Workout</button>
+      </div>
+      <!-- Progress Chart -->
+      <div class="p-4 border rounded-lg">
+        <h3 class="text-lg font-semibold text-gray-700">Progress</h3>
+        <p class="text-gray-600">[Chart Placeholder]</p>
+      </div>
+    </div>
+    <button onclick="navigateTo('screen-1')" class="block w-full mt-6 bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600" aria-label="Restart Journey">Restart Journey</button>
+  </div>
+
+  <script>
+    let currentScreen = 'screen-1';
+    let carouselIndex = 0;
+    let selectedGoal = '';
+    const carouselItems = document.querySelectorAll('.carousel-item');
+    const dots = document.querySelectorAll('.dot');
+    const loadingOverlay = document.getElementById('loading-overlay');
+
+    // Initialize Hammer.js for swipe gestures
+    const carousel = document.getElementById('carousel');
+    const hammer = new Hammer(carousel);
+    hammer.on('swipeleft', () => nextCarouselSlide());
+    hammer.on('swiperight', () => {
+      if (carouselIndex > 0) {
+        carouselIndex--;
+        updateCarousel();
+      }
+    });
+
+    function navigateTo(screenId) {
+      loadingOverlay.classList.add('active');
+      setTimeout(() => {
+        document.getElementById(currentScreen).classList.remove('active');
+        document.getElementById(screenId).classList.add('active');
+        currentScreen = screenId;
+        loadingOverlay.classList.remove('active');
+
+        if (screenId === 'screen-5' || screenId === 'screen-6') {
+          populateSummary();
+        }
+      }, 1000); // Simulated API delay
+    }
+
+    function nextCarouselSlide() {
+      carouselIndex = (carouselIndex + 1) % carouselItems.length;
+      updateCarousel();
+      if (carouselIndex === carouselItems.length - 1) {
+        setTimeout(() => navigateTo('screen-3'), 300);
+      }
+    }
+
+    function updateCarousel() {
+      carousel.style.transform = `translateX(-${carouselIndex * 100}%)`;
+      dots.forEach((dot, index) => {
+        dot.classList.toggle('active', index === carouselIndex);
+      });
+    }
+
+    function validateAndProceed() {
+      const name = document.getElementById('name').value;
+      const age = document.getElementById('age').value;
+      const fitnessLevel = document.getElementById('fitness-level').value;
+
+      let isValid = true;
+
+      // Name validation
+      if (!name) {
+        document.getElementById('name-error').classList.remove('hidden');
+        isValid = false;
+      } else {
+        document.getElementById('name-error').classList.add('hidden');
+      }
+
+      // Age validation
+      if (!age || age < 18 || age > 100) {
+        document.getElementById('age-error').classList.remove('hidden');
+        isValid = false;
+      } else {
+        document.getElementById('age-error').classList.add('hidden');
+      }
+
+      // Fitness level validation
+      if (!fitnessLevel) {
+        document.getElementById('fitness-error').classList.remove('hidden');
+        isValid = false;
+      } else {
+        document.getElementById('fitness-error').classList.add('hidden');
+      }
+
+      if (isValid) {
+        // Save to local storage
+        localStorage.setItem('userProfile', JSON.stringify({ name, age, fitnessLevel }));
+        navigateTo('screen-4');
+      }
+    }
+
+    function selectGoal(goal) {
+      selectedGoal = goal;
+      localStorage.setItem('userGoal', goal);
+      document.querySelectorAll('#screen-4 button:not(:last-child)').forEach(btn => {
+        btn.classList.toggle('bg-green-100', btn.textContent.includes(goal));
+      });
+    }
+
+    function populateSummary() {
+      const profile = JSON.parse(localStorage.getItem('userProfile')) || {};
+      const goal = localStorage.getItem('userGoal') || 'Not Selected';
+      // Update confirmation screen
+      document.getElementById('summary-name').textContent = profile.name || 'Not Provided';
+      document.getElementById('summary-age').textContent = profile.age || 'Not Provided';
+      document.getElementById('summary-fitness').textContent = profile.fitnessLevel || 'Not Provided';
+      document.getElementById('summary-goal').textContent = goal;
+      // Update dashboard screen
+      document.getElementById('dashboard-name').textContent = profile.name || 'User';
+      document.getElementById('dashboard-age').textContent = profile.age || 'Not Provided';
+      document.getElementById('dashboard-fitness').textContent = profile.fitnessLevel || 'Not Provided';
+      document.getElementById('dashboard-goal').textContent = goal;
+    }
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && currentScreen === 'screen-1') navigateTo('screen-2');
+      if (e.key === 'Enter' && currentScreen === 'screen-2') nextCarouselSlide();
+      if (e.key === 'Enter' && currentScreen === 'screen-3') validateAndProceed();
+      if (e.key === 'Enter' && currentScreen === 'screen-4' && selectedGoal) navigateTo('screen-5');
+      if (e.key === 'Enter' && currentScreen === 'screen-5') navigateTo('screen-6');
+      if (e.key === 'Enter' && currentScreen === 'screen-6') navigateTo('screen-1');
+    });
+  </script>
+</body>
+</html>
